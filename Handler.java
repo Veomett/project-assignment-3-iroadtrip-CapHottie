@@ -38,6 +38,8 @@ public class Handler {
         this.edges = write_edges(distFile);
     }
 
+    public
+
     private void join_file_alias() {
         /*
         borders contains a String[] of bordering countries, key is the given country
