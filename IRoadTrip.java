@@ -1,11 +1,14 @@
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.io.IOException;
+import java.util.*;
 
 public class IRoadTrip {
+    private final int INFINITY = Integer.MAX_VALUE; //can't get much higher than infinity...
+    private HashMap<String, String> stateDictionary;
+
+    private HashMap<String, Country> WorldGraph;
+    private HashMap<String, HashMap<String, Integer>> Edges;
 
     //constructor. passes name of files given to main. assumes order is correct:
     //borders.txt capdist.csv state_name.tsv
@@ -48,30 +51,177 @@ public class IRoadTrip {
             }
         }
         Handler handler = new Handler(bordersRows, capdistRows, nameRows);
-
+        this.stateDictionary = new HashMap<>(handler.get_nameList());
+        this.WorldGraph = new HashMap<>(handler.get_Map());
+        this.Edges = new HashMap<>(handler.get_GraphEdges());
     }
 
     /*
     * return -1 if invalid pair
+    * country1 will typically be source node
+    * params are full names of country w possible alias
     */
     public int getDistance (String country1, String country2) {
-        // Replace with your code
-        return -1;
+        Country source = get_Country(country1);
+        Country target = get_Country(country2);
+        if (source == null || target == null) {
+            return -1;
+        }
+        //check if they share border
+        if (!source.get_neighborList().contains(target)) {
+            return -1;
+        }
+
+        return Edges.get(source.get_stateID()).get(target.get_stateID()); //in km. value of the value of the Edges hashmap
+    }
+
+    private void resetGraph() {
+        WorldGraph.forEach(
+                (key, value) -> {
+                    value.set_path(null);
+                    value.set_visited(false);
+                    value.set_cost(INFINITY);
+                }
+        );
+    }
+
+    private Country next_visit(Country currentVertex) {
+        PriorityQueue<Country> minCostNode = new PriorityQueue<>();
+        for (Country neighbor : currentVertex.get_neighborList()) {
+            if (!neighbor.get_visited()){
+                minCostNode.add(neighbor);
+            }
+        }
+        return minCostNode.poll();
     }
 
     /*
     * return list of countries through which to travel to get to country 2
     * return EMPTY list if impossible, not NULL
+    * Use queue to populate List return value by enqueueing path from each country node
     */
     public List<String> findPath (String country1, String country2) {
-        // Replace with your code
-        return null;
+        resetGraph();
+        Country source = get_Country(country1);
+        Country target = get_Country(country2);
+        source.set_cost(0);
+        List<String> path = new ArrayList<>();
+
+        if (!DFSearch_target(source, target)) {
+            //return empty list if impossible path
+            return path;
+        }
+        //source and target are in the same set "tree" of paths
+        Country currentNode = source;
+        while (currentNode != null) {
+            currentNode.set_visited(true);
+            if (target.get_visited()) {
+                break;
+            }
+            for (Country adjacent : currentNode.get_neighborList()) {
+                int proposedCost = currentNode.get_cost() + getDistance(country1, country2); //cost(v) + edge_weight(v, n), respectively
+                if (adjacent.get_cost() > proposedCost) {
+                    adjacent.set_cost(proposedCost);
+                    adjacent.set_path(currentNode);
+                }
+            }
+            currentNode = next_visit(currentNode);
+        }
+
+        currentNode = target.get_last_visit();
+        Country nextNode = target;
+        while (currentNode != null) {
+            path.addFirst(formatStep(currentNode, nextNode));
+            nextNode = currentNode;
+            currentNode = currentNode.get_last_visit();
+        }
+        Collections.reverse(path);
+        return path;
     }
 
+    private String formatStep(Country currNode, Country nextNode) {
+        String step = new String(currNode.get_mainName());
+        String nextName = nextNode.get_mainName();
+        int edge = getDistance(step, nextName);
+
+        step = step.concat(" --> ");
+        step = step.concat(nextName);
+        step = step.concat(" (");
+        step = step.concat(Integer.toString(edge));
+        return step.concat(" km.)");
+    }
+
+    /*
+    * Parameters are respective stateID (3-letter codes)
+    * returns true if there is a possible path regardless of cost
+    * Start by pushing source country, then put in visited map marked as true
+    * return true if at any point target can be found in the stack or the map
+    * while loop stops when target is in either data obj
+    */
+    private boolean DFSearch_target(Country source, Country target) {
+        HashMap<Country, Boolean> visitedMap = new HashMap<>();
+        Stack<Country> searchList = new Stack<>();
+        Country visitedCountry = source;
+
+        while (visitedCountry != null) {
+            //add visited country to visitedMap to keep track and avoid infinite looping
+            visitedMap.put(visitedCountry, true);
+            //end if target has a viable path from source
+            if (visitedMap.containsKey(target) || searchList.contains(target)) {
+                return true;
+            }
+            //push neighboring countries to stack so they can be visited
+            for (Country neighbor : visitedCountry.get_neighborList()) {
+                if (!visitedMap.containsKey(neighbor)) {
+                    searchList.push(neighbor);
+                }
+            }
+            //will be null if no more countries to check
+            visitedCountry = searchList.pop();
+        }
+        return false;
+    }
+
+    private void print_pathList(List<String> steps) {
+        for (int i = 0; i < steps.size(); i++) {
+            System.out.println("* " + steps.get(i));
+        }
+    }
 
     public void acceptUserInput() {
-        // Replace with your code
-        System.out.println("IRoadTrip - skeleton");
+        Scanner receiver = new Scanner(System.in);
+        List<String> countryPair = new LinkedList<>();
+        String userInput = "";
+        while(userInput.compareTo("EXIT") != 0) {
+            if (countryPair.isEmpty()){
+                System.out.print("Enter the name of the first country (type EXIT to quit):");
+            }
+            else {
+                System.out.print("Enter the name of the second country (type EXIT to quit):");
+            }
+            userInput = receiver.nextLine();
+            if (get_Country(userInput) == null) {
+                System.out.println("Invalid country name. Please enter a valid country name.");
+                continue;
+            }
+            countryPair.add(userInput);
+            if (countryPair.size() == 2) {
+                System.out.println("Route from " + countryPair.get(0) + " to " + countryPair.get(1) + ":");
+                print_pathList(findPath(countryPair.remove(0), countryPair.remove(0)));
+            }
+        }
+        receiver.close();
+    }
+
+    private String get_countryID(String alias) {
+        //nan is default in case it's invalid
+        return stateDictionary.getOrDefault(alias, "nan");
+    }
+
+    //expects name spelled out and returns the respective country it refers to
+    //returns null if name can't be validated or doesn't exist
+    private Country get_Country(String fullname) {
+        return  WorldGraph.getOrDefault(get_countryID(fullname), null);
     }
 
     //in order, main receives borders.txt, capdist.csv, and state_names.tsv
