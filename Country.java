@@ -1,6 +1,6 @@
 import java.util.*;
 
-public class Country {
+public class Country implements Comparable<Country>{
     private String code; //i.e. USA, CAN
     private int countryNumber; //i.e. 2, 20
     private List<String> name; //head will always be main name that appears on tsv file
@@ -61,5 +61,10 @@ public class Country {
     }
     public List<Country> get_neighborList() {
         return neighbors;
+    }
+
+    @Override
+    public int compareTo(Country o) {
+        return Integer.compare(this.cost, o.cost);
     }
 }

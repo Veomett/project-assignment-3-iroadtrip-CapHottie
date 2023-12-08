@@ -9,6 +9,7 @@ public class IRoadTrip {
 
     private HashMap<String, Country> WorldGraph;
     private HashMap<String, HashMap<String, Integer>> Edges;
+    private PriorityQueue<Country> nextVisit;
 
     //constructor. passes name of files given to main. assumes order is correct:
     //borders.txt capdist.csv state_name.tsv
@@ -24,6 +25,7 @@ public class IRoadTrip {
         List<String> bordersRows = new ArrayList<>();
         List<String> capdistRows = new ArrayList<>();
         List<String> nameRows = new ArrayList<>();
+
         String row;
 
         for (String filePath : args) {
@@ -54,6 +56,7 @@ public class IRoadTrip {
         this.stateDictionary = new HashMap<>(handler.get_nameList());
         this.WorldGraph = new HashMap<>(handler.get_Map());
         this.Edges = new HashMap<>(handler.get_GraphEdges());
+        nextVisit = new PriorityQueue<>();
     }
 
     /*
@@ -64,7 +67,7 @@ public class IRoadTrip {
     public int getDistance (String country1, String country2) {
         Country source = get_Country(country1);
         Country target = get_Country(country2);
-        if (source == null || target == null) {
+        if (source == null || target == null || !Edges.containsKey(source.get_stateID()) || !Edges.containsKey(target.get_stateID())) {
             return -1;
         }
         //check if they share border
@@ -86,13 +89,25 @@ public class IRoadTrip {
     }
 
     private Country next_visit(Country currentVertex) {
-        PriorityQueue<Country> minCostNode = new PriorityQueue<>();
         for (Country neighbor : currentVertex.get_neighborList()) {
-            if (!neighbor.get_visited()){
-                minCostNode.add(neighbor);
+            if (!neighbor.get_visited() && !nextVisit.contains(neighbor)){
+                nextVisit.add(neighbor);
             }
         }
-        return minCostNode.poll();
+        if (nextVisit.isEmpty()) {
+            currentVertex.set_visited(true);
+            return next_visit(currentVertex.get_last_visit());
+        }
+
+        try {
+            while (nextVisit.peek().get_CountryNumber() == 626 || nextVisit.peek().get_CountryNumber() == 347) {
+                nextVisit.poll();
+            }
+        }
+        catch (NullPointerException nullCountry) {
+            return next_visit(currentVertex.get_last_visit());
+        }
+        return nextVisit.poll();
     }
 
     /*
@@ -113,29 +128,28 @@ public class IRoadTrip {
         }
         //source and target are in the same set "tree" of paths
         Country currentNode = source;
+        Country adjacent;
         while (currentNode != null) {
             currentNode.set_visited(true);
-            if (target.get_visited()) {
-                break;
-            }
-            for (Country adjacent : currentNode.get_neighborList()) {
-                int proposedCost = currentNode.get_cost() + getDistance(country1, country2); //cost(v) + edge_weight(v, n), respectively
+            for (int i = 0; i < currentNode.get_neighborList().size(); i++) {
+                adjacent = currentNode.get_neighborList().get(i);
+                int proposedCost = currentNode.get_cost() + getDistance(currentNode.get_mainName(), adjacent.get_mainName()); //cost(v) + edge_weight(v, n), respectively
                 if (adjacent.get_cost() > proposedCost) {
                     adjacent.set_cost(proposedCost);
                     adjacent.set_path(currentNode);
                 }
             }
+            if (target.get_visited()) {
+                break;
+            }
             currentNode = next_visit(currentNode);
         }
 
-        currentNode = target.get_last_visit();
-        Country nextNode = target;
+        currentNode = target;
         while (currentNode != null) {
-            path.addFirst(formatStep(currentNode, nextNode));
-            nextNode = currentNode;
+            path.addFirst(currentNode.get_mainName());
             currentNode = currentNode.get_last_visit();
         }
-        Collections.reverse(path);
         return path;
     }
 
@@ -177,14 +191,27 @@ public class IRoadTrip {
                 }
             }
             //will be null if no more countries to check
-            visitedCountry = searchList.pop();
+            try {
+                visitedCountry = searchList.pop();
+            }
+            catch (EmptyStackException emptyStack) {
+                return false;
+            }
         }
         return false;
     }
 
     private void print_pathList(List<String> steps) {
-        for (int i = 0; i < steps.size(); i++) {
-            System.out.println("* " + steps.get(i));
+        List<String> formattedPath = new ArrayList<>();
+        Country curr;
+        Country next;
+        for (int i = 0; i < steps.size() - 1; i++) {
+            curr = get_Country(steps.get(i));
+            next = get_Country(steps.get(i + 1));
+            formattedPath.add(formatStep(curr, next));
+        }
+        for (int i = 0; i < formattedPath.size(); i++) {
+            System.out.println("* " + formattedPath.get(i));
         }
     }
 
@@ -192,7 +219,7 @@ public class IRoadTrip {
         Scanner receiver = new Scanner(System.in);
         List<String> countryPair = new LinkedList<>();
         String userInput = "";
-        while(userInput.compareTo("EXIT") != 0) {
+        while(true) {
             if (countryPair.isEmpty()){
                 System.out.print("Enter the name of the first country (type EXIT to quit):");
             }
@@ -200,6 +227,9 @@ public class IRoadTrip {
                 System.out.print("Enter the name of the second country (type EXIT to quit):");
             }
             userInput = receiver.nextLine();
+            if (userInput.compareTo("EXIT") == 0) {
+                break;
+            }
             if (get_Country(userInput) == null) {
                 System.out.println("Invalid country name. Please enter a valid country name.");
                 continue;

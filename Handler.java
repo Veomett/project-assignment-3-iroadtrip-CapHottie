@@ -72,7 +72,7 @@ public class Handler {
         String currentRow;
         String[] rowValues;
 
-        for (int i = 0; i < borderstxt.size(); i++) {
+        for (int i = 0; i < borderstxt.size(); i++) { //loop to get new aliases
             currentRow = borderstxt.get(i);
             rowValues = currentRow.split("=");
             //rowValues[0] has name and possible aliases. values [1] has country X km; ...
@@ -80,7 +80,7 @@ public class Handler {
             Country match;
             String alias;
             for (int j = 0; j < names.size(); j++) {
-                alias = names.get(i);
+                alias = names.get(j);
                 //if one or more aliases identify a country in Atlas, assign to match, add more aliases, add borders
                 if (matchList.containsKey(alias)) {
                     match = Atlas.getOrDefault(matchList.get(alias), null);
@@ -103,7 +103,7 @@ public class Handler {
         List<String> names = new ArrayList<>();
         if (values.contains(",")) {
             String[] separated = values.split(", ");
-            names.add(separated[1].concat(" ").concat(separated[0]));
+            names.add(separated[1].concat(separated[0]));
         }
         else if (values.contains("(")) {
             int start = values.indexOf("(");
@@ -120,18 +120,23 @@ public class Handler {
     private void add_neighbors(Country source, String bordersRow) {
         Country neighbor;
         String[] countries = bordersRow.split("km;");
-        for (String country :
-                countries) {
-            char[] charArray = country.toCharArray();
-            int index = 0;
+
+        for (int i = 0; i < countries.length; i++) {
+            int index;
+            if (countries[i].contains("(")) {
+                index = countries[i].indexOf("(");
+                countries[i] = countries[i].substring(0, index).trim();
+                continue;
+            }
+            index = 0;
+            char[] charArray = countries[i].toCharArray();
             while (index < charArray.length && !Character.isDigit(charArray[index])) {
                 index++;
             }
             //index is where there's a number
-            country = country.substring(0, index).trim();
+            countries[i] = countries[i].substring(0, index).trim();
         }
-        for (String country :
-                countries) {
+        for (String country : countries) {
             neighbor = Atlas.getOrDefault(matchList.get(country), null);
             if (neighbor != null) {
                 source.add_neighbor(neighbor);
@@ -203,7 +208,7 @@ public class Handler {
         //format names with commas
         else if (formattedName.contains(",")) {
             String[] separated = formattedName.split(",");
-            aliasStack.push(separated[1].concat(" ").concat(separated[0]));
+            aliasStack.push(separated[1].concat(" ").concat(separated[0]).trim());
         }
         else {
             aliasStack.push(formattedName);
@@ -230,5 +235,6 @@ public class Handler {
         matchList.put("US", "USA");
         matchList.put("USA", "USA");
         matchList.put("UK", "UKG");
+        matchList.put("Ivory Coast", "CDI");
     }
 }
