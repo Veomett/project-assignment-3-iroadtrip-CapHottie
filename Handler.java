@@ -1,17 +1,10 @@
 import java.util.*;
 
 public class Handler {
-    /*
-    take state_name.tsv: put in hashmap<3 letter country code, LL of country names> only recent entries
-    borders.txt: new hash<country name (could be alias), ArrayL of bordering countries> parse out border length
-    capdist: hash <3 letter code, Country>
-
-    INSTEAD:
-    make a single hashmap <3 letter code, Country object>
-        Country contains name, alias, number ID, and bordering countries
-
+    /* Game plan:
     1.-iterate thru statename and instantiate countries
     2.-on borders, add new alias/names in () and format comma'd names, add neighbors
+    3.-get edge weights for graph
     */
 
     private final String PRESENT = "2020-12-31";
@@ -38,112 +31,7 @@ public class Handler {
         get_edges(capdistRows);
     }
 
-    private void get_edges(List<String> capdistrows) {
-        String[] values;
-        HashMap<String, Integer> currentEdge;
-        for (int i = 1; i < capdistrows.size(); i++) {
-            values = capdistrows.get(i).split(",");
-            //[1]ida [3]idb [4]kmdist
-            String sourceID = values[1];
-            String targetID = values[3];
-            int distance = Integer.parseInt(values[4]);
-            if (borderDistances.containsKey(sourceID)) {
-                //already instantiated a hashmap for source country
-                currentEdge = borderDistances.get(sourceID);
-                currentEdge.put(targetID, distance);
-            }
-            else {
-                //first time adding an edge to this country "node"
-                currentEdge = new HashMap<>();
-                currentEdge.put(targetID, distance);
-                borderDistances.put(sourceID, currentEdge);
-            }
-        }
-    }
-
-    /*
-    need to implement info from borderstxt after instantiating all country objs
-    neighbor hashmap values should be ptrs to already existing objs
-    1.format each row from borderstxt into a list of country names
-    2.search for country name in Atlas to match with existing country. if not found, ignore
-    2a. if matched, get neighbor country and add it to head of list's neighbor map
-    */
-    private void handle_borders(List<String> borderstxt) {
-        String currentRow;
-        String[] rowValues;
-
-        for (int i = 0; i < borderstxt.size(); i++) { //loop to get new aliases
-            currentRow = borderstxt.get(i);
-            rowValues = currentRow.split("=");
-            //rowValues[0] has name and possible aliases. values [1] has country X km; ...
-            List<String> names = format_borderRow_name(rowValues[0]);
-            Country match;
-            String alias;
-            for (int j = 0; j < names.size(); j++) {
-                alias = names.get(j);
-                //if one or more aliases identify a country in Atlas, assign to match, add more aliases, add borders
-                if (matchList.containsKey(alias)) {
-                    match = Atlas.getOrDefault(matchList.get(alias), null);
-                    //MATCH FOUND. add borders and new aliases if applicable
-                    while (!names.isEmpty()){
-                        match.add_alias(names.remove(0));
-                    }
-                    //populate neighbors
-                    add_neighbors(match, rowValues[1]);
-                }
-
-            }
-        }
-    }
-
-    //only concerned with string prior to =. formattign will be different with bordering countries
-
-    private List<String> format_borderRow_name(String values) {
-        //[1] name/alias. [2] neighbors
-        List<String> names = new ArrayList<>();
-        if (values.contains(",")) {
-            String[] separated = values.split(", ");
-            names.add(separated[1].concat(separated[0]));
-        }
-        else if (values.contains("(")) {
-            int start = values.indexOf("(");
-            String alias = values.substring(start + 1, values.indexOf(")"));
-            names.add(alias);
-            alias = values.substring(0, start).trim();
-            names.add(alias);
-        }
-        else {
-            names.add(values.trim());
-        }
-        return names;
-    }
-    private void add_neighbors(Country source, String bordersRow) {
-        Country neighbor;
-        String[] countries = bordersRow.split("km;");
-
-        for (int i = 0; i < countries.length; i++) {
-            int index;
-            if (countries[i].contains("(")) {
-                index = countries[i].indexOf("(");
-                countries[i] = countries[i].substring(0, index).trim();
-                continue;
-            }
-            index = 0;
-            char[] charArray = countries[i].toCharArray();
-            while (index < charArray.length && !Character.isDigit(charArray[index])) {
-                index++;
-            }
-            //index is where there's a number
-            countries[i] = countries[i].substring(0, index).trim();
-        }
-        for (String country : countries) {
-            neighbor = Atlas.getOrDefault(matchList.get(country), null);
-            if (neighbor != null) {
-                source.add_neighbor(neighbor);
-            }
-        }
-    }
-
+    //read rows of text, split values, and instantiate Country objs based on this info. add aliases, if any
     private void write_country_list(List<String> tsvRows) {
         String currentRow;
         String[] cellValues;
@@ -170,12 +58,12 @@ public class Handler {
         }
     }
 
+    private Stack<String> format_tsv_aliases(String countryNameColumn) {
     /*
     Name could have comma which indicates string up to that comma should go in front of the remainder.
     Names in parentheses are an additional alias
     Same for slashes. Get () first, then /, then format comma'd names
     */
-    private Stack<String> format_tsv_aliases(String countryNameColumn) {
         Stack<String> aliasStack = new Stack<>();
         String formattedName;
         int startIndex = countryNameColumn.indexOf("(");
@@ -217,6 +105,115 @@ public class Handler {
         return aliasStack;
     }
 
+
+    /*
+    need to implement info from borderstxt after instantiating all country objs
+    neighbor hashmap values should be ptrs to already existing objs
+    1.format each row from borderstxt into a list of country names
+    2.search for country name in Atlas to match with existing country. if not found, ignore
+    2a. if matched, get neighbor country and add it to head of list's neighbor map
+    */
+
+    private void handle_borders(List<String> borderstxt) {
+        String currentRow;
+        String[] rowValues;
+
+        for (int i = 0; i < borderstxt.size(); i++) { //loop to get new aliases
+            currentRow = borderstxt.get(i);
+            rowValues = currentRow.split("=");
+            //rowValues[0] has name and possible aliases. values [1] has country X km; ...
+            List<String> names = format_borderRow_name(rowValues[0]);
+            Country match;
+            String alias;
+            for (int j = 0; j < names.size(); j++) {
+                alias = names.get(j);
+                //if one or more aliases identify a country in Atlas, assign to match, add more aliases, add borders
+                if (matchList.containsKey(alias)) {
+                    match = Atlas.getOrDefault(matchList.get(alias), null);
+                    //MATCH FOUND. add borders and new aliases if applicable
+                    while (!names.isEmpty()){
+                        match.add_alias(names.remove(0));
+                    }
+                    //populate neighbors
+                    add_neighbors(match, rowValues[1]);
+                }
+
+            }
+        }
+    }
+    //process second half of bordertxt text rows. format them, and match them with existing Country instance
+
+    private void add_neighbors(Country source, String bordersRow) {
+        Country neighbor;
+        String[] countries = bordersRow.split("km;");
+
+        for (int i = 0; i < countries.length; i++) {
+            int index;
+            if (countries[i].contains("(")) { //only handful of cases,
+                index = countries[i].indexOf("(");
+                countries[i] = countries[i].substring(0, index).trim();
+                continue;
+            }
+            index = 0;
+            char[] charArray = countries[i].toCharArray();
+            while (index < charArray.length && !Character.isDigit(charArray[index])) {
+                index++;
+            }
+            //index is where there's a number
+            countries[i] = countries[i].substring(0, index).trim();
+        }
+        //add Countries found to neighborList of source Country
+        for (String country : countries) {
+            neighbor = Atlas.getOrDefault(matchList.get(country), null);
+            if (neighbor != null) {
+                source.add_neighbor(neighbor);
+            }
+        }
+    }
+    private List<String> format_borderRow_name(String values) {
+        //[1] name/alias. [2] neighbors
+        List<String> names = new ArrayList<>();
+        if (values.contains(",")) {
+            String[] separated = values.split(", ");
+            names.add(separated[1].concat(separated[0]));
+        }
+        else if (values.contains("(")) {
+            int start = values.indexOf("(");
+            String alias = values.substring(start + 1, values.indexOf(")"));
+            names.add(alias);
+            alias = values.substring(0, start).trim();
+            names.add(alias);
+        }
+        else {
+            names.add(values.trim());
+        }
+        return names;
+    }
+
+    private void get_edges(List<String> capdistrows) {
+        String[] values;
+        HashMap<String, Integer> currentEdge;
+        for (int i = 1; i < capdistrows.size(); i++) {
+            values = capdistrows.get(i).split(",");
+            //[1]ida [3]idb [4]kmdist
+            String sourceID = values[1];
+            String targetID = values[3];
+            int distance = Integer.parseInt(values[4]);
+            if (borderDistances.containsKey(sourceID)) {
+                //already instantiated a hashmap for source country
+                currentEdge = borderDistances.get(sourceID);
+                currentEdge.put(targetID, distance);
+            }
+            else {
+                //first time adding an edge to this country "node"
+                currentEdge = new HashMap<>();
+                currentEdge.put(targetID, distance);
+                borderDistances.put(sourceID, currentEdge);
+            }
+        }
+    }
+
+    //Had to hardcode. Sorry Dr. B
     private void special_matches() {
         matchList.put("The Bahamas", "BHM");
         matchList.put("Burma", "MYA");
