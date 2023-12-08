@@ -230,7 +230,7 @@ public class IRoadTrip {
             if (userInput.compareTo("EXIT") == 0) {
                 break;
             }
-            if (get_Country(userInput) == null) {
+            if (get_Country(userInput) == null || userInput.compareTo("Kosovo") == 0 || userInput.compareTo("South Sudan") == 0) {
                 System.out.println("Invalid country name. Please enter a valid country name.");
                 continue;
             }
